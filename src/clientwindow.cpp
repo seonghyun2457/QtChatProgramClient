@@ -21,7 +21,7 @@ ClientWindow::ClientWindow(QWidget *parent)
     connect(&mSocket, &QTcpSocket::connected, this, &ClientWindow::connected);
     connect(&mSocket, &QTcpSocket::disconnected, this, &ClientWindow::disconnected);
     connect(&mSocket, &QTcpSocket::stateChanged, this, &ClientWindow::stateChanged);
-    connect(&mSocket, &QIODevice::readyRead, this, &ClientWindow::readyRead);
+    connect(&mSocket, &QTcpSocket::readyRead, this, &ClientWindow::readyRead, Qt::QueuedConnection);
     connect(&mSocket, &QTcpSocket::errorOccurred, this, &ClientWindow::error);
 
     // Set GUI
@@ -85,12 +85,20 @@ void ClientWindow::stateChanged()
 void ClientWindow::readyRead()
 {
     QByteArray receivedMessage = mSocket.readAll();
-    mUi->teMessageLog->append(QString::fromUtf8(receivedMessage));
+    QString message = QString::fromUtf8(receivedMessage);
+    qDebug() << "message: " << message;
+
+    if (message == "Server: heartbeat ping\n") {
+        mSocket.write("Client: heartbeat pong\n");
+        return;
+    }
+
+    mUi->teMessageLog->append(message);
 }
 
 void ClientWindow::error(QAbstractSocket::SocketError socketError)
 {
-    mStatusLog = "Socket closed due to abnormal disconnection.\nError code" + QString::number(socketError) + ": " + mSocket.errorString();
+    mStatusLog = "Socket closed. Error code " + QString::number(socketError) + ": " + mSocket.errorString();
     mUi->lbStatus->setText(mStatusLog);
 
     mSocket.close();
