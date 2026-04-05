@@ -107,19 +107,16 @@ void ClientWindow::error(QAbstractSocket::SocketError socketError)
 void ClientWindow::on_leIPv4_textChanged(const QString &arg1)
 {
     mIPv4Address = arg1;
-    qDebug() << "mIPv4Address: " << mIPv4Address;
 }
 
 void ClientWindow::on_leNickname_textChanged(const QString &arg1)
 {
     mNickname = arg1;
-    qDebug() << "mNickname: " << mNickname;
 }
 
 void ClientWindow::on_lePort_textChanged(const QString &arg1)
 {
     mPort = arg1;
-    qDebug() << "mPort: " << mPort;
 }
 
 void ClientWindow::on_btnConnect_clicked()
