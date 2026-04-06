@@ -39,6 +39,8 @@ ClientWindow::~ClientWindow()
 
 void ClientWindow::send(const QString &iMessage)
 {
+    if (iMessage == "") return;
+
     if (mSocket.state() != QAbstractSocket::ConnectedState) {
         mStatusLog = "Failed to send a message due to disconnection.";
         return;
