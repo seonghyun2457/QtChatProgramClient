@@ -10,6 +10,7 @@ ClientWindow::ClientWindow(QWidget *parent)
     , mNickname("")
     , mMessage("")
     , mStatusLog("")
+    , mExpectedMessageSize(0)
     , mUi(std::make_unique<Ui::ClientWindow>())
 {
     // Reserve size
@@ -42,15 +43,28 @@ void ClientWindow::send(const QString &iMessage)
         mStatusLog = "Failed to send a message due to disconnection.";
         return;
     }
-    QString aMessage = mNickname + ": " + iMessage;
-    mUi->teMessageLog->append(aMessage);
-    mSocket.write(aMessage.toUtf8());
+
+    QString message = mNickname + ": " + iMessage;
+
+    writePacket(message.toUtf8());
+
+    mUi->teMessageLog->append(message);
 }
 
 void ClientWindow::clearAllMessages()
 {
     mUi->teMessageLog->clear();
     mUi->leMessage->clear();
+}
+
+void ClientWindow::writePacket(const QByteArray &iMessage)
+{
+    // packet = header(4bytes) + message
+    QByteArray packet;
+    QDataStream stream(&packet, QIODevice::WriteOnly);
+    stream << static_cast<quint32>(iMessage.size());
+    packet.append(iMessage);
+    mSocket.write(packet);
 }
 
 void ClientWindow::connected()
@@ -84,16 +98,47 @@ void ClientWindow::stateChanged()
 
 void ClientWindow::readyRead()
 {
-    QByteArray receivedMessage = mSocket.readAll();
-    QString message = QString::fromUtf8(receivedMessage);
-    qDebug() << "message: " << message;
 
-    if (message == "Server: heartbeat ping\n") {
-        mSocket.write("Client: heartbeat pong\n");
-        return;
+    // Push message to buffer
+    mBuffer.append(mSocket.readAll());
+
+    // Parse message
+    while (true) {
+        // If we don't know message size
+        if (mExpectedMessageSize == 0) {
+            if (mBuffer.size() < sizeof(quint32)) {
+                break;
+            }
+
+            // Read header (4 Bytes)
+            QDataStream stream(mBuffer);
+            stream >> mExpectedMessageSize;
+
+            // Delete header from buffer
+            mBuffer.remove(0, sizeof(quint32));
+        }
+
+        // We know message size but the whole message isn't given yet
+        if (mBuffer.size() < mExpectedMessageSize) {
+            break;
+        }
+
+        // Whole message is given
+        QByteArray messageData = mBuffer.sliced(0, mExpectedMessageSize);
+        mBuffer.remove(0, mExpectedMessageSize);
+        mExpectedMessageSize = 0;
+
+        QString message = QString::fromUtf8(messageData);
+        qDebug() << "Parsed complete message from " << mSocket.peerAddress().toString() << ":" << message;
+
+        // Heartbeat
+        if (message == "Server: heartbeat ping\n") {
+            writePacket("Client: heartbeat pong\n");
+            continue;
+        }
+
+        mUi->teMessageLog->append(message);
     }
-
-    mUi->teMessageLog->append(message);
 }
 
 void ClientWindow::error(QAbstractSocket::SocketError socketError)
@@ -169,8 +214,9 @@ void ClientWindow::on_btnConnect_clicked()
     mUi->lbStatus->setText(mStatusLog);
 
     QString aMessage = mNickname + " joined this chatroom.";
+    writePacket(aMessage.toUtf8());
+
     mUi->teMessageLog->append(aMessage);
-    mSocket.write(aMessage.toUtf8());
 }
 
 void ClientWindow::on_btnStop_clicked()
@@ -185,8 +231,9 @@ void ClientWindow::on_btnStop_clicked()
 
     if (mSocket.state() == QAbstractSocket::ConnectedState) {
         QString aMessage = mNickname + " left this chatroom.";
+        writePacket(aMessage.toUtf8());
+
         mUi->teMessageLog->append(aMessage);
-        mSocket.write(aMessage.toUtf8());
     }
 
     mSocket.disconnectFromHost();

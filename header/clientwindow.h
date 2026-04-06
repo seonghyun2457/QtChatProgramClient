@@ -45,6 +45,7 @@ private slots:
 private:
     void send(const QString& iMessage);
     void clearAllMessages();
+    void writePacket(const QByteArray& iMessage);
 
 private:
     // TCP socket
@@ -59,6 +60,10 @@ private:
 
     // Status Log
     QString mStatusLog;
+
+    // Message Parsing
+    QByteArray mBuffer;
+    quint32 mExpectedMessageSize;
 
     std::unique_ptr<Ui::ClientWindow> mUi;
 };
