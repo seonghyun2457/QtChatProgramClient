@@ -12,6 +12,7 @@ enum class ePacketType : quint8 {
 typedef struct PacketHeader {
     ePacketType packetType;
     quint32 packetSize;
+    quint32 fileNameLength;
 } PacketHeader_t;
 
 #endif // PACKETHEADER_H

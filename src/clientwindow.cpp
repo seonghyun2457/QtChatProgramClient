@@ -6,6 +6,9 @@
 #include <QFile>
 #include <QFileDialog>
 
+#include <QDesktopServices>
+#include <QUrl>
+
 ClientWindow::ClientWindow(QWidget *parent)
     : QWidget(parent)
     , mIPv4Address("")
@@ -50,27 +53,66 @@ void ClientWindow::send()
         return;
     }
 
+    if (mMessage == "") return;
+
+    QString message = mNickname + ": " + mMessage;
+    QByteArray messageByte = message.toUtf8();
+    PacketHeader header;
+    header.packetType = ePacketType::TextMessage;
+    header.packetSize = messageByte.size();
+    header.fileNameLength = 0;
+
+    writePacket(header, messageByte);
+
+    mUi->tbMessageLog->append(message);
+}
+
+void ClientWindow::sendFile()
+{
+    if (mSocket.state() != QAbstractSocket::ConnectedState) {
+        mStatusLog = "Failed to send due to disconnection.";
+        return;
+    }
+
     if (mAttachedFilePath != "") {
+        QFileInfo fileInfo(mAttachedFilePath);
+        const QString fileName = fileInfo.fileName();
+        QByteArray fileNameByte = fileName.toUtf8();
+
         QFile attachedFile(mAttachedFilePath);
 
         if (attachedFile.open(QIODevice::ReadOnly)) {
-            // const qint64 attachedFileSize = attachedFile.size();
-            QByteArray byteFile = attachedFile.readAll();
-            writePacket(ePacketType::File, byteFile);
+            // Send file
+            QByteArray dataByte = attachedFile.readAll();
+            attachedFile.close();
+            dataByte.prepend(fileNameByte);
+
+            PacketHeader header;
+            header.packetType = ePacketType::File;
+            header.packetSize = dataByte.size();
+            header.fileNameLength = fileNameByte.size();
+
+            writePacket(header, dataByte);
+
+            memset(&header, 0, sizeof(PacketHeader));
+
+            // send a log
+            QString message = mNickname + " sent " + fileName + ".";
+            QByteArray messageByte = message.toUtf8();
+
+            header.packetType = ePacketType::TextMessage;
+            header.packetSize = messageByte.size();
+            header.fileNameLength = 0;
+
+            writePacket(header, messageByte);
+
+            mUi->tbMessageLog->append(message);
         } else {
             qCritical() << "Couldn't open " << mAttachedFilePath << ".";
         }
 
         mAttachedFilePath = "";
     }
-
-    if (mMessage == "") return;
-
-    QString message = mNickname + ": " + mMessage;
-
-    writePacket(ePacketType::TextMessage, message.toUtf8());
-
-    mUi->tbMessageLog->append(message);
 }
 
 void ClientWindow::clearAllMessages()
@@ -79,29 +121,13 @@ void ClientWindow::clearAllMessages()
     mUi->leMessage->clear();
 }
 
-void ClientWindow::writePacket(const ePacketType iPacketType, const QByteArray& iPayload)
+void ClientWindow::writePacket(const PacketHeader iPacketHeader, const QByteArray& iPayload)
 {
-    PacketHeader packetHeader;
-    packetHeader.packetType = iPacketType;
-    packetHeader.packetSize = iPayload.size();
-
-    switch (iPacketType) {
-    case ePacketType::Heartbeat:
-        break;
-    case ePacketType::TextMessage:
-        break;
-    case ePacketType::File:
-        break;
-    default:
-        qCritical() << "Invalid packet type.";
-        return;
-    }
-
     // packet = header + payload
     QByteArray packet;
-    packet.reserve(sizeof(PacketHeader) + packetHeader.packetSize);
+    packet.reserve(sizeof(PacketHeader) + iPacketHeader.packetSize);
 
-    packet.append((char*)&packetHeader, sizeof(PacketHeader));
+    packet.append((char*)&iPacketHeader, sizeof(PacketHeader));
     packet.append(iPayload);
 
     mSocket.write(packet);
@@ -163,27 +189,55 @@ void ClientWindow::readyRead()
 
         // Whole message is given
         QByteArray receivedData = mBuffer.sliced(sizeof(PacketHeader), header.packetSize);
-        mBuffer.clear();
+        mBuffer.remove(0, sizeof(PacketHeader) + header.packetSize);
 
         qDebug() << "Parsed complete message from " << mSocket.peerAddress().toString() << ":" << receivedData;
 
         // Heartbeat
         if (header.packetType == ePacketType::Heartbeat) {
-            writePacket(ePacketType::Heartbeat, "Client: heartbeat pong\n");
-            break;
+            static const QString heartBeatResponse = "Client: heartbeat pong\n";
+            QByteArray heartBeatResponseByte = heartBeatResponse.toUtf8();
+
+            PacketHeader heartBeatHeader;
+            heartBeatHeader.packetType = ePacketType::Heartbeat;
+            heartBeatHeader.packetSize = heartBeatResponseByte.size();
+            heartBeatHeader.fileNameLength = 0;
+
+            writePacket(heartBeatHeader, heartBeatResponseByte);
+
+            continue;
+
         } else if (header.packetType == ePacketType::File) {
-            QString filePath = QDir(QDir::currentPath()).filePath("output.txt");
+            QByteArray fileName = receivedData.sliced(0, header.fileNameLength);
+            qDebug() << "fileName: " << fileName;
+            QByteArray fileData = receivedData.sliced(header.fileNameLength, header.packetSize - header.fileNameLength);
+            qDebug() << "fileData: " << fileData;
+            QString filePath = QDir(QDir::currentPath()).filePath(fileName);
             qDebug() << "filePath: " << filePath;
+
+
             QFile receivedFile(filePath);
 
             if (receivedFile.open(QIODevice::WriteOnly)) {
-                receivedFile.write(receivedData);
+                receivedFile.write(fileData);
                 receivedFile.close();
+
+                QTextBrowser *browser = new QTextBrowser(this);
+                browser->setReadOnly(true);
+
+                QString link = QString("<a href=\"file:///%1\">Open file: %2</a>").arg(filePath).arg(fileName);
+                browser->setHtml(link);
+
+                connect(browser, &QTextBrowser::anchorClicked, [](const QUrl &url) {
+                    if (url.isLocalFile()) {
+                        QDesktopServices::openUrl(url);
+                    }
+                });
             } else {
                 qCritical() << "Couldn't open receivedFile.";
             }
 
-            break;
+            continue;
         }
 
         mUi->tbMessageLog->append(receivedData);
@@ -267,10 +321,17 @@ void ClientWindow::on_btnConnect_clicked()
             + "\n\nClient socket:\nIPv4: " + mSocket.localAddress().toString() + ", Port: " + QString::number(mSocket.localPort());
     mUi->lbStatus->setText(mStatusLog);
 
-    QString aMessage = mNickname + " joined this chatroom.";
-    writePacket(ePacketType::TextMessage, aMessage.toUtf8());
+    QString message = mNickname + " joined this chatroom.";
+    QByteArray messageByte = message.toUtf8();
 
-    mUi->tbMessageLog->append(aMessage);
+    PacketHeader header;
+    header.packetType = ePacketType::TextMessage;
+    header.packetSize = messageByte.size();
+    header.fileNameLength = 0;
+
+    writePacket(header, messageByte);
+
+    mUi->tbMessageLog->append(message);
 }
 
 void ClientWindow::on_btnStop_clicked()
@@ -284,10 +345,17 @@ void ClientWindow::on_btnStop_clicked()
     }
 
     if (mSocket.state() == QAbstractSocket::ConnectedState) {
-        QString aMessage = mNickname + " left this chatroom.";
-        writePacket(ePacketType::TextMessage, aMessage.toUtf8());
+        QString message = mNickname + " left this chatroom.";
+        QByteArray messageByte = message.toUtf8();
 
-        mUi->tbMessageLog->append(aMessage);
+        PacketHeader header;
+        header.packetType = ePacketType::TextMessage;
+        header.packetSize = messageByte.size();
+        header.fileNameLength = 0;
+
+        writePacket(header, messageByte);
+
+        mUi->tbMessageLog->append(message);
     }
 
     mSocket.disconnectFromHost();
@@ -320,8 +388,8 @@ void ClientWindow::on_btnAttach_clicked()
 
     if (mAttachedFilePath != "") {
         QFileInfo fileInfo(mAttachedFilePath);
-        QString fileName = fileInfo.fileName();
-        qint64 fileSize = fileInfo.size();
+        const QString fileName = fileInfo.fileName();
+        const qint64 fileSize = fileInfo.size();
 
         // Convert fileSize unit
         QString sizeStr;
@@ -331,6 +399,8 @@ void ClientWindow::on_btnAttach_clicked()
 
         qDebug() << "fileName: " << fileName;
         qDebug() << "sizeStr: " << sizeStr;
+
+        sendFile();
 
         /*
         // UI 구성

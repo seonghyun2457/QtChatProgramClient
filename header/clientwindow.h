@@ -46,8 +46,9 @@ private slots:
 
 private:
     void send();
+    void sendFile();
     void clearAllMessages();
-    void writePacket(const ePacketType iPacketType, const QByteArray& iPayload);
+    void writePacket(const PacketHeader iPacketHeader, const QByteArray& iPayload);
 
 private:
     // TCP socket
