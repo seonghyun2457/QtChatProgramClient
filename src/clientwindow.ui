@@ -95,6 +95,13 @@
         <widget class="QLineEdit" name="leMessage"/>
        </item>
        <item>
+        <widget class="QPushButton" name="btnAttach">
+         <property name="text">
+          <string>Attach</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="btnSend">
          <property name="text">
           <string>Send</string>

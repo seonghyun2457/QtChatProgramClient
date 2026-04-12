@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTcpSocket>
 
+#include "packetHeader.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -36,6 +37,7 @@ private slots:
     void on_btnStop_clicked();
     void on_btnQuit_clicked();
     void on_btnSend_clicked();
+    void on_btnAttach_clicked();
 
     // Message
     void on_leMessage_editingFinished();
@@ -43,9 +45,9 @@ private slots:
 
 
 private:
-    void send(const QString& iMessage);
+    void send();
     void clearAllMessages();
-    void writePacket(const QByteArray& iMessage);
+    void writePacket(const ePacketType iPacketType, const QByteArray& iPayload);
 
 private:
     // TCP socket
@@ -63,7 +65,10 @@ private:
 
     // Message Parsing
     QByteArray mBuffer;
-    quint32 mExpectedMessageSize;
+    PacketHeader mHeader;
+
+    // File
+    QString mAttachedFileName;
 
     std::unique_ptr<Ui::ClientWindow> mUi;
 };
