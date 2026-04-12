@@ -83,11 +83,7 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout_2">
      <item>
-      <widget class="QTextEdit" name="teMessageLog">
-       <property name="readOnly">
-        <bool>true</bool>
-       </property>
-      </widget>
+      <widget class="QTextBrowser" name="tbMessageLog"/>
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_3">

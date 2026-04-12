@@ -68,7 +68,7 @@ private:
     PacketHeader mHeader;
 
     // File
-    QString mAttachedFileName;
+    QString mAttachedFilePath;
 
     std::unique_ptr<Ui::ClientWindow> mUi;
 };

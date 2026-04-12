@@ -13,7 +13,7 @@ ClientWindow::ClientWindow(QWidget *parent)
     , mNickname("")
     , mMessage("")
     , mStatusLog("")
-    , mAttachedFileName("")
+    , mAttachedFilePath("")
     , mUi(std::make_unique<Ui::ClientWindow>())
 {
     memset(&mHeader, 0, sizeof(PacketHeader));
@@ -21,7 +21,7 @@ ClientWindow::ClientWindow(QWidget *parent)
     // Reserve size
     mMessage.reserve(256);
     mStatusLog.reserve(256);
-    mAttachedFileName.reserve(256);
+    mAttachedFilePath.reserve(256);
 
 
     // CONNECT
@@ -50,18 +50,18 @@ void ClientWindow::send()
         return;
     }
 
-    if (mAttachedFileName != "") {
-        QFile attachedFile(mAttachedFileName);
+    if (mAttachedFilePath != "") {
+        QFile attachedFile(mAttachedFilePath);
 
         if (attachedFile.open(QIODevice::ReadOnly)) {
             // const qint64 attachedFileSize = attachedFile.size();
             QByteArray byteFile = attachedFile.readAll();
             writePacket(ePacketType::File, byteFile);
         } else {
-            qCritical() << "Couldn't open " << mAttachedFileName << ".";
+            qCritical() << "Couldn't open " << mAttachedFilePath << ".";
         }
 
-        mAttachedFileName = "";
+        mAttachedFilePath = "";
     }
 
     if (mMessage == "") return;
@@ -70,12 +70,12 @@ void ClientWindow::send()
 
     writePacket(ePacketType::TextMessage, message.toUtf8());
 
-    mUi->teMessageLog->append(message);
+    mUi->tbMessageLog->append(message);
 }
 
 void ClientWindow::clearAllMessages()
 {
-    mUi->teMessageLog->clear();
+    mUi->tbMessageLog->clear();
     mUi->leMessage->clear();
 }
 
@@ -186,7 +186,7 @@ void ClientWindow::readyRead()
             break;
         }
 
-        mUi->teMessageLog->append(receivedData);
+        mUi->tbMessageLog->append(receivedData);
     }
 }
 
@@ -270,7 +270,7 @@ void ClientWindow::on_btnConnect_clicked()
     QString aMessage = mNickname + " joined this chatroom.";
     writePacket(ePacketType::TextMessage, aMessage.toUtf8());
 
-    mUi->teMessageLog->append(aMessage);
+    mUi->tbMessageLog->append(aMessage);
 }
 
 void ClientWindow::on_btnStop_clicked()
@@ -287,7 +287,7 @@ void ClientWindow::on_btnStop_clicked()
         QString aMessage = mNickname + " left this chatroom.";
         writePacket(ePacketType::TextMessage, aMessage.toUtf8());
 
-        mUi->teMessageLog->append(aMessage);
+        mUi->tbMessageLog->append(aMessage);
     }
 
     mSocket.disconnectFromHost();
@@ -315,8 +315,44 @@ void ClientWindow::on_btnSend_clicked()
 void ClientWindow::on_btnAttach_clicked()
 {
     qDebug() << "on_btnAttach_clicked";
-    mAttachedFileName = QFileDialog::getOpenFileName(this, "Select a file", QDir::homePath());
-    qDebug() << "fileName: " << mAttachedFileName;
+    mAttachedFilePath = QFileDialog::getOpenFileName(this, "Select a file", QDir::homePath());
+    qDebug() << "filePath: " << mAttachedFilePath;
+
+    if (mAttachedFilePath != "") {
+        QFileInfo fileInfo(mAttachedFilePath);
+        QString fileName = fileInfo.fileName();
+        qint64 fileSize = fileInfo.size();
+
+        // Convert fileSize unit
+        QString sizeStr;
+        if (fileSize < 1024) sizeStr = QString::number(fileSize) + "B";
+        else if (fileSize < 1024 * 1024) sizeStr = QString::number(fileSize / 1024.0, 'f', 1) + "KB";
+        else sizeStr = QString::number(fileSize / (1024.0 * 1024.0), 'f', 1) + "MB";
+
+        qDebug() << "fileName: " << fileName;
+        qDebug() << "sizeStr: " << sizeStr;
+
+        /*
+        // UI 구성
+        QHBoxLayout layout = QHBoxLayout(this);
+        auto *nameLabel = new QLabel(fileName, this);
+        auto *sizeLabel = new QLabel(sizeStr, this);
+        auto *removeBtn = new QPushButton("X", this);
+
+        nameLabel->setStyleSheet("font-weight: bold;");
+        sizeLabel->setStyleSheet("color: gray;");
+        removeBtn->setFixedSize(20, 20);
+        this->setStyleSheet("background-color: #f0f0f0; border-radius: 5px;");
+
+        layout.addWidget(nameLabel);
+        layout.addWidget(sizeLabel);
+        layout.addStretch();
+        layout.addWidget(removeBtn);
+
+        // 삭제 버튼 클릭 시 위젯 제거
+        connect(removeBtn, &QPushButton::clicked, this, &QHBoxLayout::deleteLater);
+        */
+    }
 }
 
 void ClientWindow::on_leMessage_editingFinished()
