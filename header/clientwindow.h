@@ -38,7 +38,7 @@ private slots:
     void on_btnStop_clicked();
     void on_btnQuit_clicked();
     void on_btnSend_clicked();
-    void on_btnAttach_clicked();
+    void on_btnFile_clicked();
 
     // Message
     void on_leMessage_editingFinished();

@@ -1,6 +1,8 @@
 #include "clientwindow.h"
 #include "ui_clientwindow.h"
 
+#include "filesenderdialog.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -348,9 +350,9 @@ void ClientWindow::on_btnSend_clicked()
     on_leMessage_editingFinished();
 }
 
-void ClientWindow::on_btnAttach_clicked()
+void ClientWindow::on_btnFile_clicked()
 {
-    qDebug() << "on_btnAttach_clicked";
+    qDebug() << "on_btnFile_clicked";
     mAttachedFilePath = QFileDialog::getOpenFileName(this, "Select a file", QDir::homePath());
     qDebug() << "filePath: " << mAttachedFilePath;
 
@@ -368,28 +370,13 @@ void ClientWindow::on_btnAttach_clicked()
         qDebug() << "fileName: " << fileName;
         qDebug() << "sizeStr: " << sizeStr;
 
-        sendFile();
+        FileSenderDialog fileSenderDialog(fileName, this);
 
-        /*
-        // UI 구성
-        QHBoxLayout layout = QHBoxLayout(this);
-        auto *nameLabel = new QLabel(fileName, this);
-        auto *sizeLabel = new QLabel(sizeStr, this);
-        auto *removeBtn = new QPushButton("X", this);
+        if (fileSenderDialog.exec() == QDialog::Accepted) {
+            sendFile();
+        }
 
-        nameLabel->setStyleSheet("font-weight: bold;");
-        sizeLabel->setStyleSheet("color: gray;");
-        removeBtn->setFixedSize(20, 20);
-        this->setStyleSheet("background-color: #f0f0f0; border-radius: 5px;");
-
-        layout.addWidget(nameLabel);
-        layout.addWidget(sizeLabel);
-        layout.addStretch();
-        layout.addWidget(removeBtn);
-
-        // 삭제 버튼 클릭 시 위젯 제거
-        connect(removeBtn, &QPushButton::clicked, this, &QHBoxLayout::deleteLater);
-        */
+        mAttachedFilePath = "";
     }
 }
 

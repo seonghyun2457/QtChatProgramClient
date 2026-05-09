@@ -95,9 +95,9 @@
         <widget class="QLineEdit" name="leMessage"/>
        </item>
        <item>
-        <widget class="QPushButton" name="btnAttach">
+        <widget class="QPushButton" name="btnFile">
          <property name="text">
-          <string>Attach</string>
+          <string>File</string>
          </property>
         </widget>
        </item>
