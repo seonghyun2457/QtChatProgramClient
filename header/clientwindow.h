@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QTcpSocket>
+#include <QtGlobal>
 
 #include "packetHeader.h"
 
@@ -72,5 +73,9 @@ private:
     QString mAttachedFilePath;
 
     std::unique_ptr<Ui::ClientWindow> mUi;
+
+public:
+    static const QString s_joiningMessage;
+    static const QString s_leavingMessage;
 };
 #endif // CLIENTWINDOW_H

@@ -9,6 +9,9 @@
 #include <QDesktopServices>
 #include <QUrl>
 
+const QString ClientWindow::s_joiningMessage = " joined this chatroom.";
+const QString ClientWindow::s_leavingMessage = " left this chatroom.";
+
 ClientWindow::ClientWindow(QWidget *parent)
     : QWidget(parent)
     , mIPv4Address("")
@@ -55,16 +58,15 @@ void ClientWindow::send()
 
     if (mMessage == "") return;
 
-    QString message = mNickname + ": " + mMessage;
-    QByteArray messageByte = message.toUtf8();
     PacketHeader header;
     header.packetType = ePacketType::TextMessage;
-    header.packetSize = messageByte.size();
-    header.fileNameLength = 0;
+    header.packetSize = mMessage.size();
+    qstrncpy(header.senderNickName, mNickname.toUtf8().constData(), sizeof(header.senderNickName));
+    memset(header.fileName, 0, sizeof(header.fileName));
 
-    writePacket(header, messageByte);
+    writePacket(header, mMessage.toUtf8());
 
-    mUi->tbMessageLog->append(message);
+    mUi->tbMessageLog->append(mNickname + ": " + mMessage);
 }
 
 void ClientWindow::sendFile()
@@ -85,28 +87,17 @@ void ClientWindow::sendFile()
             // Send file
             QByteArray dataByte = attachedFile.readAll();
             attachedFile.close();
-            dataByte.prepend(fileNameByte);
 
             PacketHeader header;
             header.packetType = ePacketType::File;
             header.packetSize = dataByte.size();
-            header.fileNameLength = fileNameByte.size();
+            qstrncpy(header.senderNickName, mNickname.toUtf8().constData(), sizeof(header.senderNickName));
+            qstrncpy(header.fileName, fileName.toUtf8().constData(), sizeof(header.fileName));
 
             writePacket(header, dataByte);
 
-            memset(&header, 0, sizeof(PacketHeader));
-
-            // send a log
-            QString message = mNickname + " sent " + fileName + ".";
-            QByteArray messageByte = message.toUtf8();
-
-            header.packetType = ePacketType::TextMessage;
-            header.packetSize = messageByte.size();
-            header.fileNameLength = 0;
-
-            writePacket(header, messageByte);
-
-            mUi->tbMessageLog->append(message);
+            QString link = QString("%1 sent <a href=\"file:///%2\"> %3</a>").arg(mNickname).arg(mAttachedFilePath).arg(fileName);
+            mUi->tbMessageLog->append(link);
         } else {
             qCritical() << "Couldn't open " << mAttachedFilePath << ".";
         }
@@ -167,80 +158,58 @@ void ClientWindow::readyRead()
 
     // Push message to buffer
     mBuffer.append(mSocket.readAll());
+    qDebug() << "mBuffer: " << mBuffer;
 
     // Parse message
-    while (true) {
-        // Read header
-        PacketHeader header;
-        const char* pData = mBuffer.data();
-        memcpy(&header, pData, sizeof(PacketHeader));
+    // Read header
+    PacketHeader header;
+    const char* pData = mBuffer.data();
+    memcpy(&header, pData, sizeof(PacketHeader));
 
-        // If we don't know message size
-        if (header.packetSize == 0) {
-            if (mBuffer.size() < sizeof(PacketHeader)) {
-                break;
-            }
+    QString senderNickname(header.senderNickName);
+    QString fileName(header.fileName);
+
+    // Whole message is given
+    QByteArray receivedData = mBuffer.sliced(sizeof(PacketHeader), header.packetSize);
+    mBuffer.remove(0, sizeof(PacketHeader) + header.packetSize);
+
+
+    // Heartbeat
+    if (header.packetType == ePacketType::Heartbeat) {
+        static const QString heartBeatResponse = "Client: heartbeat pong\n";
+        QByteArray heartBeatResponseByte = heartBeatResponse.toUtf8();
+
+        PacketHeader heartBeatHeader;
+        heartBeatHeader.packetType = ePacketType::Heartbeat;
+        heartBeatHeader.packetSize = heartBeatResponseByte.size();
+        qstrncpy(heartBeatHeader.senderNickName, mNickname.toUtf8().constData(), sizeof(heartBeatHeader.senderNickName));
+        memset(heartBeatHeader.fileName, 0, sizeof(heartBeatHeader.fileName));
+
+        writePacket(heartBeatHeader, heartBeatResponseByte);
+    } else if (header.packetType == ePacketType::File) {
+        qDebug() << "fileName: " << fileName;
+        qDebug() << "receivedData: " << receivedData;
+        QString filePath = QDir(QDir::currentPath()).filePath(fileName);
+        qDebug() << "filePath: " << filePath;
+
+
+        QFile receivedFile(filePath);
+
+        if (receivedFile.open(QIODevice::WriteOnly)) {
+            receivedFile.write(receivedData);
+            receivedFile.close();
+
+            QTextBrowser *browser = new QTextBrowser(this);
+            browser->setReadOnly(true);
+
+            QString link = QString("%1 sent <a href=\"file:///%2\"> %3</a>").arg(mNickname).arg(filePath).arg(fileName);
+            mUi->tbMessageLog->append(link);
+        } else {
+            qCritical() << "Couldn't open receivedFile.";
         }
 
-        // We know message size but the whole message isn't given yet
-        if (mBuffer.size() < header.packetSize + sizeof(PacketHeader)) {
-            break;
-        }
-
-        // Whole message is given
-        QByteArray receivedData = mBuffer.sliced(sizeof(PacketHeader), header.packetSize);
-        mBuffer.remove(0, sizeof(PacketHeader) + header.packetSize);
-
-        qDebug() << "Parsed complete message from " << mSocket.peerAddress().toString() << ":" << receivedData;
-
-        // Heartbeat
-        if (header.packetType == ePacketType::Heartbeat) {
-            static const QString heartBeatResponse = "Client: heartbeat pong\n";
-            QByteArray heartBeatResponseByte = heartBeatResponse.toUtf8();
-
-            PacketHeader heartBeatHeader;
-            heartBeatHeader.packetType = ePacketType::Heartbeat;
-            heartBeatHeader.packetSize = heartBeatResponseByte.size();
-            heartBeatHeader.fileNameLength = 0;
-
-            writePacket(heartBeatHeader, heartBeatResponseByte);
-
-            continue;
-
-        } else if (header.packetType == ePacketType::File) {
-            QByteArray fileName = receivedData.sliced(0, header.fileNameLength);
-            qDebug() << "fileName: " << fileName;
-            QByteArray fileData = receivedData.sliced(header.fileNameLength, header.packetSize - header.fileNameLength);
-            qDebug() << "fileData: " << fileData;
-            QString filePath = QDir(QDir::currentPath()).filePath(fileName);
-            qDebug() << "filePath: " << filePath;
-
-
-            QFile receivedFile(filePath);
-
-            if (receivedFile.open(QIODevice::WriteOnly)) {
-                receivedFile.write(fileData);
-                receivedFile.close();
-
-                QTextBrowser *browser = new QTextBrowser(this);
-                browser->setReadOnly(true);
-
-                QString link = QString("<a href=\"file:///%1\">Open file: %2</a>").arg(filePath).arg(fileName);
-                browser->setHtml(link);
-
-                connect(browser, &QTextBrowser::anchorClicked, [](const QUrl &url) {
-                    if (url.isLocalFile()) {
-                        QDesktopServices::openUrl(url);
-                    }
-                });
-            } else {
-                qCritical() << "Couldn't open receivedFile.";
-            }
-
-            continue;
-        }
-
-        mUi->tbMessageLog->append(receivedData);
+    } else {
+        mUi->tbMessageLog->append(senderNickname + ": "+ receivedData);
     }
 }
 
@@ -321,17 +290,16 @@ void ClientWindow::on_btnConnect_clicked()
             + "\n\nClient socket:\nIPv4: " + mSocket.localAddress().toString() + ", Port: " + QString::number(mSocket.localPort());
     mUi->lbStatus->setText(mStatusLog);
 
-    QString message = mNickname + " joined this chatroom.";
-    QByteArray messageByte = message.toUtf8();
 
     PacketHeader header;
     header.packetType = ePacketType::TextMessage;
-    header.packetSize = messageByte.size();
-    header.fileNameLength = 0;
+    header.packetSize = s_joiningMessage.size();
+    qstrncpy(header.senderNickName, mNickname.toUtf8().constData(), sizeof(header.senderNickName));
+    memset(header.fileName, 0, sizeof(header.fileName));
 
-    writePacket(header, messageByte);
+    writePacket(header, s_joiningMessage.toUtf8());
 
-    mUi->tbMessageLog->append(message);
+    mUi->tbMessageLog->append(mNickname + s_joiningMessage);
 }
 
 void ClientWindow::on_btnStop_clicked()
@@ -345,17 +313,15 @@ void ClientWindow::on_btnStop_clicked()
     }
 
     if (mSocket.state() == QAbstractSocket::ConnectedState) {
-        QString message = mNickname + " left this chatroom.";
-        QByteArray messageByte = message.toUtf8();
-
         PacketHeader header;
         header.packetType = ePacketType::TextMessage;
-        header.packetSize = messageByte.size();
-        header.fileNameLength = 0;
+        header.packetSize = s_leavingMessage.size();
+        qstrncpy(header.senderNickName, mNickname.toUtf8().constData(), sizeof(header.senderNickName));
+        memset(header.fileName, 0, sizeof(header.fileName));
 
-        writePacket(header, messageByte);
+        writePacket(header, s_leavingMessage.toUtf8());
 
-        mUi->tbMessageLog->append(message);
+        mUi->tbMessageLog->append(mNickname + s_leavingMessage);
     }
 
     mSocket.disconnectFromHost();

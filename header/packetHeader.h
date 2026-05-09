@@ -3,6 +3,9 @@
 
 #include <QtGlobal>
 
+constexpr quint32 NICKNAME_LENGTH = 16;
+constexpr quint32 FILENAME_LENGTH = 32;
+
 enum class ePacketType : quint8 {
     Heartbeat = 0,
     TextMessage,
@@ -12,7 +15,8 @@ enum class ePacketType : quint8 {
 typedef struct PacketHeader {
     ePacketType packetType;
     quint32 packetSize;
-    quint32 fileNameLength;
+    char senderNickName[NICKNAME_LENGTH + 1];
+    char fileName[FILENAME_LENGTH + 1];
 } PacketHeader_t;
 
 #endif // PACKETHEADER_H
