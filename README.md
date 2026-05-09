@@ -2,6 +2,11 @@
 
 A robust C++ desktop chat application built with the Qt Framework. This client supports real-time text messaging and file sharing over TCP/IP, featuring a custom binary protocol and a user-friendly GUI.
 
+<div align="center">
+    <img src="./images/client_gui.png" title="gui"/>
+    <p><em>image: client GUI</em></p>
+</div>
+
 ## Features
 
 - **Real-time Messaging**: Send and receive text messages instantly via TCP sockets.
