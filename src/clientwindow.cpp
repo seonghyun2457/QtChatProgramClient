@@ -9,8 +9,8 @@
 #include <QDesktopServices>
 #include <QUrl>
 
-const QString ClientWindow::s_joiningMessage = " joined this chatroom.";
-const QString ClientWindow::s_leavingMessage = " left this chatroom.";
+const QString ClientWindow::s_joiningMessage = "joined this chatroom.";
+const QString ClientWindow::s_leavingMessage = "left this chatroom.";
 
 ClientWindow::ClientWindow(QWidget *parent)
     : QWidget(parent)
@@ -39,6 +39,10 @@ ClientWindow::ClientWindow(QWidget *parent)
 
     // Set GUI
     mUi->setupUi(this);
+
+    mUi->tbMessageLog->setOpenLinks(false);
+    // Open a new window when clicking a link
+    connect(mUi->tbMessageLog, &QTextBrowser::anchorClicked, this, [](const QUrl &url){QDesktopServices::openUrl(url);});
 }
 
 ClientWindow::~ClientWindow()
@@ -65,8 +69,9 @@ void ClientWindow::send()
     memset(header.fileName, 0, sizeof(header.fileName));
 
     writePacket(header, mMessage.toUtf8());
+    mUi->tbMessageLog->append(QString("<span>%1: %2</span>").arg(mNickname).arg(mMessage.toHtmlEscaped()));
 
-    mUi->tbMessageLog->append(mNickname + ": " + mMessage);
+    qDebug() << "mMessage: " << mMessage;
 }
 
 void ClientWindow::sendFile()
@@ -96,7 +101,7 @@ void ClientWindow::sendFile()
 
             writePacket(header, dataByte);
 
-            QString link = QString("%1 sent <a href=\"file:///%2\"> %3</a>").arg(mNickname).arg(mAttachedFilePath).arg(fileName);
+            QString link = QString("<span>%1 sent <a href=\"file:///%2\">%3</a></span>").arg(mNickname).arg(mAttachedFilePath).arg(fileName);
             mUi->tbMessageLog->append(link);
         } else {
             qCritical() << "Couldn't open " << mAttachedFilePath << ".";
@@ -199,17 +204,14 @@ void ClientWindow::readyRead()
             receivedFile.write(receivedData);
             receivedFile.close();
 
-            QTextBrowser *browser = new QTextBrowser(this);
-            browser->setReadOnly(true);
-
-            QString link = QString("%1 sent <a href=\"file:///%2\"> %3</a>").arg(mNickname).arg(filePath).arg(fileName);
+            QString link = QString("<span>%1 sent <a href=\"file:///%2\">%3</a></span>").arg(mNickname).arg(filePath).arg(fileName);
             mUi->tbMessageLog->append(link);
         } else {
             qCritical() << "Couldn't open receivedFile.";
         }
 
     } else {
-        mUi->tbMessageLog->append(senderNickname + ": "+ receivedData);
+        mUi->tbMessageLog->append(QString("<span>%1: %2</span>").arg(senderNickname).arg(QString::fromUtf8(receivedData).toHtmlEscaped()));
     }
 }
 
@@ -299,7 +301,7 @@ void ClientWindow::on_btnConnect_clicked()
 
     writePacket(header, s_joiningMessage.toUtf8());
 
-    mUi->tbMessageLog->append(mNickname + s_joiningMessage);
+    mUi->tbMessageLog->append(QString("<span>%1: %2</span>").arg(mNickname).arg(s_joiningMessage));
 }
 
 void ClientWindow::on_btnStop_clicked()
@@ -321,7 +323,7 @@ void ClientWindow::on_btnStop_clicked()
 
         writePacket(header, s_leavingMessage.toUtf8());
 
-        mUi->tbMessageLog->append(mNickname + s_leavingMessage);
+        mUi->tbMessageLog->append(QString("<span>%1: %2</span>").arg(mNickname).arg(s_leavingMessage));
     }
 
     mSocket.disconnectFromHost();
