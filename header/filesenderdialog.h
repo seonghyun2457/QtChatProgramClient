@@ -20,7 +20,7 @@ private slots:
     void on_btnCancel_clicked();
 
 private:
-    Ui::FileSenderDialog *ui;
+    std::unique_ptr<Ui::FileSenderDialog> m_ui;
 };
 
 #endif // FILESENDERDIALOG_H

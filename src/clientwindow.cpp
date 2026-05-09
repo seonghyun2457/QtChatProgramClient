@@ -2,6 +2,7 @@
 #include "ui_clientwindow.h"
 
 #include "filesenderdialog.h"
+#include "filenamewarningdialog.h"
 
 #include <QDebug>
 #include <QDir>
@@ -271,6 +272,12 @@ void ClientWindow::on_btnConnect_clicked()
         return;
     }
 
+    if (mNickname.length() > NICKNAME_LENGTH) {
+        mStatusLog = "Nickname length should be less than " + QString::number(NICKNAME_LENGTH) + " charaters.";
+        mUi->lbStatus->setText(mStatusLog);
+        return;
+    }
+
     mSocket.connectToHost(hostAddress, port);
 
     if (!mSocket.isOpen()) {
@@ -361,19 +368,17 @@ void ClientWindow::on_btnFile_clicked()
         const QString fileName = fileInfo.fileName();
         const qint64 fileSize = fileInfo.size();
 
-        // Convert fileSize unit
-        QString sizeStr;
-        if (fileSize < 1024) sizeStr = QString::number(fileSize) + "B";
-        else if (fileSize < 1024 * 1024) sizeStr = QString::number(fileSize / 1024.0, 'f', 1) + "KB";
-        else sizeStr = QString::number(fileSize / (1024.0 * 1024.0), 'f', 1) + "MB";
-
         qDebug() << "fileName: " << fileName;
-        qDebug() << "sizeStr: " << sizeStr;
+        qDebug() << "fileSize: " << fileSize;
 
-        FileSenderDialog fileSenderDialog(fileName, this);
-
-        if (fileSenderDialog.exec() == QDialog::Accepted) {
-            sendFile();
+        if (fileName.length() > FILENAME_LENGTH) {
+            FilenameWarningDialog filenameWarningDialog(this);
+            filenameWarningDialog.exec();
+        } else {
+            FileSenderDialog fileSenderDialog(fileName, this);
+            if (fileSenderDialog.exec() == QDialog::Accepted) {
+                sendFile();
+            }
         }
 
         mAttachedFilePath = "";
