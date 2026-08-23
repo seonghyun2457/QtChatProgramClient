@@ -207,7 +207,7 @@ void ClientWindow::readyRead()
             receivedFile.write(receivedData);
             receivedFile.close();
 
-            QString link = QString("<span>%1 sent <a href=\"file:///%2\">%3</a></span>").arg(mNickname).arg(filePath).arg(fileName);
+            QString link = QString("<span>%1 sent <a href=\"file:///%2\">%3</a></span>").arg(senderNickname).arg(filePath).arg(fileName);
             mUi->tbMessageLog->append(link);
         } else {
             qCritical() << "Couldn't open receivedFile.";
